@@ -10,16 +10,23 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(args: &[String]) -> Result<Config, &'static str> {
-        if args.len() < 3 {
-            return Err("Not enough arguments!");
-        }
-        let query = args[1].clone();
-        let filename = args[2].clone();
+    pub fn new(mut args: env::Args) -> Result<Config, &'static str> {
+        
+        args.next(); // skip the first arg (calling alias)
+
+        let query = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Missing query string"),
+        };
+
+        let filename = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Missing file name"),
+        };
         
         let case_insensitive;
 
-        match args.get(3) {
+        match args.next() {
             Some(arg) => {
                 if arg == "-i" {
                     case_insensitive = true;
@@ -30,17 +37,38 @@ impl Config {
             None => { case_insensitive = false }
         }
 
-        let case_insensitive = !(env::var("CASE_INSENSITIVE").is_err()) ||
-                                   case_insensitive;
+        let case_insensitive = 
+            !(env::var("CASE_INSENSITIVE").is_err()) || case_insensitive;
     
-
-
         Ok(Config {query, filename, case_insensitive})
     }
 }
 
-/// Module functions
-
+/// Runs the minigrep application
+/// 
+/// # Example
+/// 
+/// ```
+/// use minigrep::{run, Config};
+/// 
+/// let conf = Config{query: "foo".to_string(), 
+///                   filename: "foo bar".to_string(),
+///                   case_insensitive: false};
+/// run(conf); // prints "foo" 
+/// 
+/// let conf = Config{query: "Foo".to_string(), 
+///                   filename: "foo bar".to_string(),
+///                   case_insensitive: false};
+/// run(conf); // prints nothing, as Foo and foo are not the same
+/// 
+/// let conf = Config{query: "Foo".to_string(), 
+///                   filename: "foo bar".to_string(),
+///                   case_insensitive: true};
+/// 
+/// run(conf); // print "foo" since case is ignored
+/// 
+/// ```
+/// 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(&config.filename)?;
 
@@ -54,33 +82,21 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         println!("{}", line);
     }
 
-    Ok(())
+    Ok(()) // we all good...
 }
 
 fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-
-    for line in contents.lines() {
-        if line.contains(query) {
-            results.push(line);
-        }
-    }
-
-    results
+    contents
+        .lines()
+        .filter(|line| line.contains(query))
+        .collect()
 }
 
 fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-
-    let query = query.to_lowercase();
-
-    for line in contents.lines() {
-        if line.to_lowercase().contains(&query) {
-            results.push(line);
-        }
-    }
-
-    results
+    contents
+        .lines()
+        .filter(|line| line.to_lowercase().contains(&query.to_lowercase()))
+        .collect()
 }
 
 /// Unit tests
